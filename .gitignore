@@ -1,0 +1,22 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Node (если будет)
+node_modules/
+
+# Composer (если будет)
+vendor/
+
+# ACF Pro (внешняя зависимость, не коммитим)
+advanced-custom-fields-pro/
+
