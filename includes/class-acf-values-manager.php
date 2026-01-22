@@ -73,7 +73,16 @@ class ACF_MCP_Values_Manager {
         $errors = [];
 
         foreach ($fields as $field_name => $value) {
-            $result = update_field($field_name, $value, $acf_post_id);
+            // Получаем field object для определения типа и key
+            $field_object = $this->get_field_object_by_name($field_name, $acf_post_id);
+            
+            // Для flexible_content и repeater используем field key
+            $field_key_or_name = $field_name;
+            if ($field_object && in_array($field_object['type'], ['flexible_content', 'repeater', 'group'])) {
+                $field_key_or_name = $field_object['key'];
+            }
+            
+            $result = update_field($field_key_or_name, $value, $acf_post_id);
             
             if ($result !== false) {
                 $updated[] = $field_name;
@@ -266,6 +275,65 @@ class ACF_MCP_Values_Manager {
             'valid' => false,
             'error' => "Неизвестный формат post_id: {$acf_post_id}"
         ];
+    }
+
+    /**
+     * Получить field object по имени поля
+     * Ищет поле в группах полей, привязанных к объекту
+     */
+    private function get_field_object_by_name($field_name, $post_id) {
+        if (!function_exists('acf_get_field_groups') || !function_exists('acf_get_fields')) {
+            return null;
+        }
+
+        // Кэш для field objects
+        static $cache = [];
+        $cache_key = $post_id . '_' . $field_name;
+        
+        if (isset($cache[$cache_key])) {
+            return $cache[$cache_key];
+        }
+
+        // Получаем группы полей для объекта
+        $groups = $this->get_field_groups_for_post($post_id);
+        
+        foreach ($groups as $group) {
+            $fields = acf_get_fields($group['key']);
+            if (!$fields) continue;
+            
+            foreach ($fields as $field) {
+                if ($field['name'] === $field_name) {
+                    $cache[$cache_key] = $field;
+                    return $field;
+                }
+            }
+        }
+
+        $cache[$cache_key] = null;
+        return null;
+    }
+
+    /**
+     * Получить группы полей для конкретного поста
+     */
+    private function get_field_groups_for_post($post_id) {
+        if (!function_exists('acf_get_field_groups')) {
+            return [];
+        }
+
+        $args = [];
+        
+        if ($post_id === 'option') {
+            $args['options_page'] = true;
+        } elseif (is_numeric($post_id)) {
+            $post = get_post($post_id);
+            if ($post) {
+                $args['post_type'] = $post->post_type;
+                $args['post_id'] = $post_id;
+            }
+        }
+
+        return acf_get_field_groups($args);
     }
 
     /**
