@@ -137,7 +137,13 @@ class ACF_MCP_REST_API {
         register_rest_route($this->namespace, '/post-types/(?P<post_type>[a-zA-Z0-9_-]+)', array(
             'methods' => 'DELETE',
             'callback' => array($this, 'delete_post_type'),
-            'permission_callback' => array($this, 'check_permissions')
+            'permission_callback' => array($this, 'check_permissions'),
+            'args' => array(
+                'permanent' => array(
+                    'type' => 'boolean',
+                    'description' => 'Полное удаление в ACF (true) или мягкая деактивация (false). По умолчанию: false'
+                )
+            )
         ));
         
         // Получить шаблоны типов записей
@@ -526,7 +532,7 @@ class ACF_MCP_REST_API {
      * Создать новый тип записи
      */
     public function create_post_type($request) {
-        $params = $request->get_params();
+        $params = $this->normalize_request_params($request);
         
         $result = ACF_MCP_CPT_Creator::get_instance()->create_post_type($params);
         
@@ -538,6 +544,26 @@ class ACF_MCP_REST_API {
             );
         }
         
+        return rest_ensure_response($result);
+    }
+
+    /**
+     * Обновить тип записи
+     */
+    public function update_post_type($request) {
+        $post_type = $request->get_param('post_type');
+        $params = $this->normalize_request_params($request);
+
+        $result = ACF_MCP_CPT_Creator::get_instance()->update_post_type($post_type, $params);
+
+        if (is_wp_error($result)) {
+            return new WP_Error(
+                $result->get_error_code(),
+                $result->get_error_message(),
+                array('status' => 400)
+            );
+        }
+
         return rest_ensure_response($result);
     }
     
@@ -566,8 +592,9 @@ class ACF_MCP_REST_API {
      */
     public function delete_post_type($request) {
         $post_type = $request->get_param('post_type');
+        $permanent = $request->get_param('permanent') === 'true' || $request->get_param('permanent') === true;
         
-        $result = ACF_MCP_CPT_Creator::get_instance()->delete_post_type($post_type);
+        $result = ACF_MCP_CPT_Creator::get_instance()->delete_post_type($post_type, $permanent);
         
         if (is_wp_error($result)) {
             return new WP_Error(

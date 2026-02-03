@@ -1233,7 +1233,8 @@ class ACF_MCP_Integration {
     public function handle_get_templates($params) {
         // Получаем шаблоны из REST API класса
         $rest_api = ACF_MCP_REST_API::get_instance();
-        $fake_request = new WP_REST_Request('GET', '/acf-cpt-manager/v1/post-types/templates');
+        // Важно: актуальный namespace плагина — acf-mcp-manager/v1
+        $fake_request = new WP_REST_Request('GET', '/acf-mcp-manager/v1/post-types/templates');
         
         $response = $rest_api->get_templates($fake_request);
         

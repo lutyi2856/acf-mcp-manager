@@ -32,81 +32,10 @@ class ACF_MCP_CPT_Creator {
     
     /**
      * Конструктор
+     * ACF Pro сам регистрирует post types, плагин только создаёт их через ACF API
      */
     private function __construct() {
-        // Регистрируем типы записей СРАЗУ в конструкторе
-        // так как конструктор уже вызывается в хуке init
-        $this->register_stored_post_types();
-    }
-    
-    /**
-     * Регистрация сохраненных типов записей
-     * Читает напрямую из ACF записей (acf-post-type posts)
-     */
-    public function register_stored_post_types() {
-        error_log('ACF MCP Manager: register_stored_post_types called');
-        
-        // Читаем напрямую из ACF записей
-        $acf_post_types = get_posts(array(
-            'post_type'      => 'acf-post-type',
-            'posts_per_page' => -1,
-            'post_status'    => 'publish',
-        ));
-        
-        error_log('ACF MCP Manager: Found ' . count($acf_post_types) . ' ACF post types');
-        
-        foreach ($acf_post_types as $acf_cpt) {
-            $data = maybe_unserialize($acf_cpt->post_content);
-            if (!is_array($data)) {
-                continue;
-            }
-            
-            // post_type slug хранится в post_excerpt
-            $post_type_key = $acf_cpt->post_excerpt;
-            if (empty($post_type_key)) {
-                $post_type_key = $data['post_type'] ?? '';
-            }
-            
-            if (empty($post_type_key)) {
-                continue;
-            }
-            
-            // Пропускаем если уже зарегистрирован ACF Pro
-            if (post_type_exists($post_type_key)) {
-                error_log("ACF CPT Manager: {$post_type_key} already registered by ACF Pro");
-                continue;
-            }
-            
-            error_log("ACF CPT Manager: Registering {$post_type_key}");
-            
-            // Формируем аргументы для register_post_type
-            $labels = $data['labels'] ?? array();
-            $register_args = array(
-                'labels'              => $labels,
-                'description'         => $data['description'] ?? '',
-                'public'              => !empty($data['public']),
-                'hierarchical'        => !empty($data['hierarchical']),
-                'exclude_from_search' => !empty($data['exclude_from_search']),
-                'publicly_queryable'  => !empty($data['publicly_queryable']),
-                'show_ui'             => !empty($data['show_ui']),
-                'show_in_menu'        => !empty($data['show_in_menu']),
-                'show_in_admin_bar'   => !empty($data['show_in_admin_bar']),
-                'show_in_nav_menus'   => !empty($data['show_in_nav_menus']),
-                'show_in_rest'        => !empty($data['show_in_rest']),
-                'menu_icon'           => $data['menu_icon'] ?? 'dashicons-admin-post',
-                'supports'            => $data['supports'] ?? array('title', 'editor', 'thumbnail'),
-                'has_archive'         => !empty($data['has_archive']),
-                'rewrite'             => array('slug' => $post_type_key),
-            );
-            
-            $result = register_post_type($post_type_key, $register_args);
-            
-            if (is_wp_error($result)) {
-                error_log("ACF CPT Manager: Ошибка регистрации типа {$post_type_key}: " . $result->get_error_message());
-            } else {
-                error_log("ACF CPT Manager: Тип записи {$post_type_key} зарегистрирован успешно");
-            }
-        }
+        // Ничего не делаем - ACF Pro сам регистрирует типы записей
     }
     
     /**
@@ -143,7 +72,8 @@ class ACF_MCP_CPT_Creator {
         $stored_post_types = get_option('acf_mcp_manager_post_types', array());
         $stored_post_types[$args['key']] = array(
             'acf_id' => $result['ID'],
-            'args' => $acf_post_type,
+            // Храним фактически сохранённый объект из ACF (с корректным ID и нормализованными настройками)
+            'args' => $result,
             'active' => true,
             'created_at' => current_time('mysql'),
             'created_by' => get_current_user_id(),
@@ -160,6 +90,57 @@ class ACF_MCP_CPT_Creator {
             'post_type' => $args['key'],
             'acf_id' => $result['ID'],
             'message' => sprintf('Тип записи "%s" успешно создан через ACF Pro', $args['label'])
+        );
+    }
+
+    /**
+     * Обновить тип записи в ACF Pro
+     */
+    public function update_post_type($post_type_key, array $args) {
+        $stored_post_types = get_option('acf_mcp_manager_post_types', array());
+
+        if (!isset($stored_post_types[$post_type_key])) {
+            return new WP_Error('post_type_not_found', 'Тип записи не найден');
+        }
+
+        if (!function_exists('acf_get_post_type') || !function_exists('acf_update_post_type')) {
+            return new WP_Error('acf_not_available', 'ACF Pro функции недоступны');
+        }
+
+        $acf_id = (int) ($stored_post_types[$post_type_key]['acf_id'] ?? 0);
+        if (!$acf_id) {
+            return new WP_Error('acf_id_missing', 'Не найден ACF ID типа записи');
+        }
+
+        $current = acf_get_post_type($acf_id);
+        if (empty($current) || !is_array($current)) {
+            return new WP_Error('acf_post_type_not_found', 'ACF тип записи не найден');
+        }
+
+        // Запрещаем менять ключ/имя post_type через update, чтобы не ломать существующие записи
+        unset($args['key'], $args['post_type']);
+
+        // Разрешаем обновлять заголовок, описание, иконку и любые поля ACF, если они переданы
+        $merged = wp_parse_args($args, $current);
+
+        $updated = acf_update_post_type($merged);
+        if (is_wp_error($updated)) {
+            return $updated;
+        }
+
+        $stored_post_types[$post_type_key]['args'] = $updated;
+        $stored_post_types[$post_type_key]['active'] = (bool) ($updated['active'] ?? $stored_post_types[$post_type_key]['active']);
+        $stored_post_types[$post_type_key]['updated_at'] = current_time('mysql');
+        $stored_post_types[$post_type_key]['updated_by'] = get_current_user_id();
+        update_option('acf_mcp_manager_post_types', $stored_post_types);
+
+        flush_rewrite_rules();
+
+        return array(
+            'success' => true,
+            'post_type' => $post_type_key,
+            'acf_id' => $acf_id,
+            'message' => sprintf('Тип записи "%s" успешно обновлён', $post_type_key)
         );
     }
     
@@ -277,15 +258,41 @@ class ACF_MCP_CPT_Creator {
     /**
      * Удалить тип записи
      */
-    public function delete_post_type($post_type_key) {
+    public function delete_post_type($post_type_key, $permanent = false) {
         $stored_post_types = get_option('acf_mcp_manager_post_types', array());
         
         if (!isset($stored_post_types[$post_type_key])) {
             return new WP_Error('post_type_not_found', 'Тип записи не найден');
         }
-        
-        // Деактивируем тип записи
-        $stored_post_types[$post_type_key]['active'] = false;
+
+        $acf_id = (int) ($stored_post_types[$post_type_key]['acf_id'] ?? 0);
+        if (!$acf_id) {
+            return new WP_Error('acf_id_missing', 'Не найден ACF ID типа записи');
+        }
+
+        if (!function_exists('acf_update_post_type_active_status')) {
+            return new WP_Error('acf_not_available', 'ACF Pro функции недоступны');
+        }
+
+        // По умолчанию — безопасная "мягкая" деактивация, permanent=true — удаление из ACF
+        if ($permanent) {
+            if (!function_exists('acf_delete_post_type')) {
+                return new WP_Error('acf_not_available', 'ACF Pro функции удаления недоступны');
+            }
+            $deleted = acf_delete_post_type($acf_id);
+            if (!$deleted) {
+                return new WP_Error('acf_delete_failed', 'Не удалось удалить тип записи в ACF');
+            }
+
+            unset($stored_post_types[$post_type_key]);
+        } else {
+            $ok = acf_update_post_type_active_status($acf_id, false);
+            if (!$ok) {
+                return new WP_Error('acf_deactivate_failed', 'Не удалось деактивировать тип записи в ACF');
+            }
+            $stored_post_types[$post_type_key]['active'] = false;
+        }
+
         update_option('acf_mcp_manager_post_types', $stored_post_types);
         
         // Сбрасываем rewrite rules
@@ -293,7 +300,9 @@ class ACF_MCP_CPT_Creator {
         
         return array(
             'success' => true,
-            'message' => sprintf('Тип записи "%s" деактивирован', $post_type_key)
+            'message' => $permanent
+                ? sprintf('Тип записи "%s" удалён', $post_type_key)
+                : sprintf('Тип записи "%s" деактивирован', $post_type_key)
         );
     }
     
@@ -306,8 +315,24 @@ class ACF_MCP_CPT_Creator {
         if (!isset($stored_post_types[$post_type_key])) {
             return new WP_Error('post_type_not_found', 'Тип записи не найден');
         }
-        
-        $stored_post_types[$post_type_key]['active'] = $active;
+
+        $acf_id = (int) ($stored_post_types[$post_type_key]['acf_id'] ?? 0);
+        if (!$acf_id) {
+            return new WP_Error('acf_id_missing', 'Не найден ACF ID типа записи');
+        }
+
+        if (!function_exists('acf_update_post_type_active_status')) {
+            return new WP_Error('acf_not_available', 'ACF Pro функции недоступны');
+        }
+
+        $ok = acf_update_post_type_active_status($acf_id, (bool) $active);
+        if (!$ok) {
+            return new WP_Error('acf_toggle_failed', 'Не удалось изменить активность типа записи в ACF');
+        }
+
+        $stored_post_types[$post_type_key]['active'] = (bool) $active;
+        $stored_post_types[$post_type_key]['updated_at'] = current_time('mysql');
+        $stored_post_types[$post_type_key]['updated_by'] = get_current_user_id();
         update_option('acf_mcp_manager_post_types', $stored_post_types);
         
         // Сбрасываем rewrite rules

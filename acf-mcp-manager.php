@@ -48,10 +48,14 @@ class ACF_MCP_Manager {
      * Конструктор
      */
     private function __construct() {
-        error_log('ACF MCP Manager: Plugin constructor called');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('ACF MCP Manager: Plugin constructor called');
+        }
         $this->init_hooks();
         $this->load_dependencies();
-        error_log('ACF MCP Manager: Plugin initialized');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('ACF MCP Manager: Plugin initialized');
+        }
     }
     
     /**
@@ -102,54 +106,86 @@ class ACF_MCP_Manager {
      * Инициализация плагина
      */
     public function init() {
-        error_log('ACF MCP Manager: init() method called');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('ACF MCP Manager: init() method called');
+        }
         
         // Проверяем наличие ACF - используем правильное имя класса
         if (!function_exists('acf') && !class_exists('acf')) {
-            error_log('ACF MCP Manager: ACF not found, showing notice');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF not found, showing notice');
+            }
             add_action('admin_notices', array($this, 'acf_missing_notice'));
             return;
         }
         
-        error_log('ACF MCP Manager: ACF found, initializing components...');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('ACF MCP Manager: ACF found, initializing components...');
+        }
         
         // Инициализируем компоненты только если классы загружены
         if (class_exists('ACF_MCP_CPT_Creator')) {
-            error_log('ACF MCP Manager: Initializing ACF_MCP_CPT_Creator...');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: Initializing ACF_MCP_CPT_Creator...');
+            }
             ACF_MCP_CPT_Creator::get_instance();
-            error_log('ACF MCP Manager: ACF_MCP_CPT_Creator initialized');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_CPT_Creator initialized');
+            }
         } else {
-            error_log('ACF MCP Manager: ACF_MCP_CPT_Creator class not found');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_CPT_Creator class not found');
+            }
         }
         
         if (class_exists('ACF_MCP_Options_Page_Creator')) {
-            error_log('ACF MCP Manager: Initializing ACF_MCP_Options_Page_Creator...');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: Initializing ACF_MCP_Options_Page_Creator...');
+            }
             ACF_MCP_Options_Page_Creator::get_instance();
-            error_log('ACF MCP Manager: ACF_MCP_Options_Page_Creator initialized');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_Options_Page_Creator initialized');
+            }
         } else {
-            error_log('ACF MCP Manager: ACF_MCP_Options_Page_Creator class not found');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_Options_Page_Creator class not found');
+            }
         }
         
         if (class_exists('ACF_MCP_Taxonomy_Creator')) {
-            error_log('ACF MCP Manager: Initializing ACF_MCP_Taxonomy_Creator...');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: Initializing ACF_MCP_Taxonomy_Creator...');
+            }
             ACF_MCP_Taxonomy_Creator::get_instance();
-            error_log('ACF MCP Manager: ACF_MCP_Taxonomy_Creator initialized');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_Taxonomy_Creator initialized');
+            }
         } else {
-            error_log('ACF MCP Manager: ACF_MCP_Taxonomy_Creator class not found');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_Taxonomy_Creator class not found');
+            }
         }
         
         if (class_exists('ACF_MCP_Field_Group_Creator')) {
-            error_log('ACF MCP Manager: Initializing ACF_MCP_Field_Group_Creator...');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: Initializing ACF_MCP_Field_Group_Creator...');
+            }
             ACF_MCP_Field_Group_Creator::get_instance();
-            error_log('ACF MCP Manager: ACF_MCP_Field_Group_Creator initialized');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_Field_Group_Creator initialized');
+            }
         } else {
-            error_log('ACF MCP Manager: ACF_MCP_Field_Group_Creator class not found');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_Field_Group_Creator class not found');
+            }
         }
         
         if (class_exists('ACF_MCP_REST_API')) {
             ACF_MCP_REST_API::get_instance();
         } else {
-            error_log('ACF MCP Manager: ACF_MCP_REST_API class not found');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_REST_API class not found');
+            }
         }
         
         // Загружаем переводы
@@ -169,12 +205,18 @@ class ACF_MCP_Manager {
      * Регистрация MCP tools
      */
     public function register_mcp_tools() {
-        error_log('ACF MCP Manager: register_mcp_tools called');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('ACF MCP Manager: register_mcp_tools called');
+        }
         if (class_exists('ACF_MCP_Integration')) {
             ACF_MCP_Integration::get_instance()->register_tools();
-            error_log('ACF MCP Manager: MCP tools registered successfully');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: MCP tools registered successfully');
+            }
         } else {
-            error_log('ACF MCP Manager: ACF_MCP_Integration class not found');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('ACF MCP Manager: ACF_MCP_Integration class not found');
+            }
         }
     }
     
@@ -239,7 +281,11 @@ function ACF_MCP_Manager() {
 }
 
 // Запуск плагина  
-error_log('ACF MCP Manager: Starting plugin initialization...');
+if (defined('WP_DEBUG') && WP_DEBUG) {
+    error_log('ACF MCP Manager: Starting plugin initialization...');
+}
 ACF_MCP_Manager();
-error_log('ACF MCP Manager: Plugin started successfully');
+if (defined('WP_DEBUG') && WP_DEBUG) {
+    error_log('ACF MCP Manager: Plugin started successfully');
+}
 
