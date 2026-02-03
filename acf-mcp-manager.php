@@ -229,6 +229,21 @@ class ACF_MCP_Manager {
         if ($old_settings) {
             update_option('acf_mcp_manager_settings', $old_settings);
         }
+
+        // Миграция основных данных со старых ключей (acf-cpt-manager → acf-mcp-manager)
+        $migrations = array(
+            'acf_cpt_manager_post_types' => 'acf_mcp_manager_post_types',
+            'acf_cpt_manager_options_pages' => 'acf_mcp_manager_options_pages',
+            'acf_cpt_manager_taxonomies' => 'acf_mcp_manager_taxonomies',
+            'acf_cpt_manager_field_groups' => 'acf_mcp_manager_field_groups',
+        );
+        foreach ($migrations as $old_key => $new_key) {
+            $old_value = get_option($old_key);
+            $new_value = get_option($new_key);
+            if (!empty($old_value) && empty($new_value)) {
+                update_option($new_key, $old_value);
+            }
+        }
         
         // Создаем базовые настройки если их нет
         if (!get_option('acf_mcp_manager_settings')) {

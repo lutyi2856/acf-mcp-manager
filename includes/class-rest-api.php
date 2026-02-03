@@ -115,7 +115,7 @@ class ACF_MCP_REST_API {
         
         // Обновить тип записи
         register_rest_route($this->namespace, '/post-types/(?P<post_type>[a-zA-Z0-9_-]+)', array(
-            'methods' => 'PUT',
+            'methods' => array('PUT', 'PATCH'),
             'callback' => array($this, 'update_post_type'),
             'permission_callback' => array($this, 'check_permissions')
         ));
@@ -215,7 +215,7 @@ class ACF_MCP_REST_API {
         
         // Обновить страницу опций
         register_rest_route($this->namespace, '/options-pages/(?P<menu_slug>[a-zA-Z0-9_-]+)', array(
-            'methods' => 'PUT',
+            'methods' => array('PUT', 'PATCH'),
             'callback' => array($this, 'update_options_page'),
             'permission_callback' => array($this, 'check_permissions')
         ));
@@ -237,7 +237,13 @@ class ACF_MCP_REST_API {
         register_rest_route($this->namespace, '/options-pages/(?P<menu_slug>[a-zA-Z0-9_-]+)', array(
             'methods' => 'DELETE',
             'callback' => array($this, 'delete_options_page'),
-            'permission_callback' => array($this, 'check_permissions')
+            'permission_callback' => array($this, 'check_permissions'),
+            'args' => array(
+                'permanent' => array(
+                    'type' => 'boolean',
+                    'description' => 'Полное удаление из БД (true) или только деактивация (false). По умолчанию: false'
+                )
+            )
         ));
         
         // Получить шаблоны страниц опций
@@ -265,7 +271,7 @@ class ACF_MCP_REST_API {
         
         // Обновить таксономию
         register_rest_route($this->namespace, '/taxonomies/(?P<taxonomy_key>[a-zA-Z0-9_-]+)', array(
-            'methods' => 'PUT',
+            'methods' => array('PUT', 'PATCH'),
             'callback' => array($this, 'update_taxonomy'),
             'permission_callback' => array($this, 'check_permissions')
         ));
@@ -322,7 +328,7 @@ class ACF_MCP_REST_API {
         
         // Обновить группу полей
         register_rest_route($this->namespace, '/field-groups/(?P<group_key>[a-zA-Z0-9_-]+)', array(
-            'methods' => 'PUT',
+            'methods' => array('PUT', 'PATCH'),
             'callback' => array($this, 'update_field_group'),
             'permission_callback' => array($this, 'check_permissions')
         ));
@@ -430,7 +436,7 @@ class ACF_MCP_REST_API {
         
         // Обновить терм
         register_rest_route($this->namespace, '/terms/(?P<taxonomy>[a-zA-Z0-9_-]+)/(?P<term_id>[\d]+)', array(
-            'methods' => 'PUT',
+            'methods' => array('PUT', 'PATCH'),
             'callback' => array($this, 'update_term'),
             'permission_callback' => array($this, 'check_permissions')
         ));
@@ -681,7 +687,7 @@ class ACF_MCP_REST_API {
      * Создать новую страницу опций
      */
     public function create_options_page($request) {
-        $params = $request->get_params();
+        $params = $this->normalize_request_params($request);
         
         $result = ACF_MCP_Options_Page_Creator::get_instance()->create_options_page($params);
         
@@ -701,7 +707,7 @@ class ACF_MCP_REST_API {
      */
     public function update_options_page($request) {
         $menu_slug = $request->get_param('menu_slug');
-        $params = $request->get_params();
+        $params = $this->normalize_request_params($request);
         
         $result = ACF_MCP_Options_Page_Creator::get_instance()->update_options_page($menu_slug, $params);
         

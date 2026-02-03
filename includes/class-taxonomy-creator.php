@@ -27,9 +27,9 @@ class ACF_MCP_Taxonomy_Creator {
      * Конструктор
      */
     private function __construct() {
-        // Регистрируем сохраненные таксономии сразу в конструкторе
-        // так как конструктор уже вызывается в хуке init
-        $this->register_stored_taxonomies();
+        // Регистрируем сохраненные таксономии ПОСЛЕ регистрации ACF (и других плагинов)
+        // Важно: класс инстанцируется в init, поэтому используем priority 99, чтобы callback отработал в этом же init позже.
+        add_action('init', array($this, 'register_stored_taxonomies'), 99);
     }
     
     /**
@@ -73,6 +73,11 @@ class ACF_MCP_Taxonomy_Creator {
         $is_active = !empty($taxonomy_data['active']);
 
         if (!$is_active) {
+            return;
+        }
+
+        // Если таксономия уже зарегистрирована (например, ACF Pro сделал это сам) — ничего не делаем
+        if (taxonomy_exists($taxonomy_key)) {
             return;
         }
 
@@ -140,13 +145,17 @@ class ACF_MCP_Taxonomy_Creator {
             $register_args['graphql_plural_name'] = $saved_args['graphql_plural_name'] ?? $taxonomy_key . 's';
         }
 
-        error_log('ACF Taxonomy Creator: Registering taxonomy ' . $taxonomy_key . ' for post types: ' . implode(', ', $post_types));
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('ACF Taxonomy Creator: Registering taxonomy ' . $taxonomy_key . ' for post types: ' . implode(', ', $post_types));
+        }
         register_taxonomy($taxonomy_key, $post_types, $register_args);
 
-        if (taxonomy_exists($taxonomy_key)) {
-            error_log('ACF Taxonomy Creator: Taxonomy ' . $taxonomy_key . ' registered successfully');
-        } else {
-            error_log('ACF Taxonomy Creator: ERROR - Taxonomy ' . $taxonomy_key . ' was NOT registered');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            if (taxonomy_exists($taxonomy_key)) {
+                error_log('ACF Taxonomy Creator: Taxonomy ' . $taxonomy_key . ' registered successfully');
+            } else {
+                error_log('ACF Taxonomy Creator: ERROR - Taxonomy ' . $taxonomy_key . ' was NOT registered');
+            }
         }
     }
     
@@ -232,7 +241,8 @@ class ACF_MCP_Taxonomy_Creator {
         $stored_taxonomies = get_option('acf_mcp_manager_taxonomies', array());
         $stored_taxonomies[$taxonomy_key] = array(
             'acf_post_id' => $result['ID'] ?? 0,
-            'args' => $acf_taxonomy, // Сохраняем полный ACF формат вместо упрощенного
+            // Храним фактически сохранённый объект из ACF (с корректным ID и нормализованными настройками)
+            'args' => $result,
             'active' => true,
             'created_at' => current_time('mysql'),
             'created_by' => get_current_user_id(),
@@ -375,47 +385,44 @@ class ACF_MCP_Taxonomy_Creator {
         if (!isset($stored_taxonomies[$taxonomy_key])) {
             return new WP_Error('taxonomy_not_found', 'Таксономия не найдена');
         }
-        
-        $post_id = $stored_taxonomies[$taxonomy_key]['acf_post_id'] ?? 0;
-        
-        if ($post_id) {
-            $post = get_post($post_id);
-            if (!$post) {
-                return new WP_Error('post_not_found', 'ACF UI пост не найден');
-            }
-            
-            // Читаем текущие данные из post_content
-            $current_data = maybe_unserialize($post->post_content);
-            if (!is_array($current_data)) {
-                $current_data = array();
-            }
-            
-            // Объединяем с новыми данными
-            $updated_data = array_merge($current_data, array_filter($args, function($key) {
-                return in_array($key, array(
-                    'singular_label', 'plural_label', 'post_types', 'hierarchical',
-                    'show_ui', 'show_in_menu', 'show_in_rest', 'show_admin_column',
-                    'description', 'show_in_graphql', 'graphql_single_name', 'graphql_plural_name'
-                ));
-            }, ARRAY_FILTER_USE_KEY));
-            
-            // Обновляем WordPress post
-            wp_update_post(array(
-                'ID' => $post_id,
-                'post_title' => $args['singular_name'] ?? $post->post_title,
-                'post_content' => maybe_serialize($updated_data)
-            ));
+
+        if (!function_exists('acf_get_taxonomy') || !function_exists('acf_update_taxonomy')) {
+            return new WP_Error('acf_not_available', 'ACF Pro функции недоступны');
         }
-        
-        // Обновляем в нашей системе
-        $taxonomy_data = $this->prepare_acf_ui_taxonomy($args);
-        $stored_taxonomies[$taxonomy_key]['args'] = array_merge($stored_taxonomies[$taxonomy_key]['args'], $taxonomy_data);
+
+        $post_id = (int) ($stored_taxonomies[$taxonomy_key]['acf_post_id'] ?? 0);
+        if (!$post_id) {
+            return new WP_Error('acf_id_missing', 'Не найден ACF ID таксономии');
+        }
+
+        $current = acf_get_taxonomy($post_id);
+        if (empty($current) || !is_array($current)) {
+            return new WP_Error('acf_taxonomy_not_found', 'ACF таксономия не найдена');
+        }
+
+        $args = is_array($args) ? $args : array();
+        unset($args['key'], $args['taxonomy']);
+
+        // Разрешаем обновлять любые переданные поля ACF-объекта
+        $merged = wp_parse_args($args, $current);
+
+        $updated = acf_update_taxonomy($merged);
+        if (is_wp_error($updated)) {
+            return $updated;
+        }
+
+        $stored_taxonomies[$taxonomy_key]['args'] = $updated;
+        $stored_taxonomies[$taxonomy_key]['active'] = (bool) ($updated['active'] ?? $stored_taxonomies[$taxonomy_key]['active']);
         $stored_taxonomies[$taxonomy_key]['updated_at'] = current_time('mysql');
-        
+        $stored_taxonomies[$taxonomy_key]['updated_by'] = get_current_user_id();
         update_option('acf_mcp_manager_taxonomies', $stored_taxonomies);
-        
+
+        flush_rewrite_rules();
+
         return array(
             'success' => true,
+            'taxonomy_key' => $taxonomy_key,
+            'post_id' => $post_id,
             'message' => sprintf('Таксономия "%s" обновлена', $taxonomy_key)
         );
     }
@@ -429,32 +436,51 @@ class ACF_MCP_Taxonomy_Creator {
         if (!isset($stored_taxonomies[$taxonomy_key])) {
             return new WP_Error('taxonomy_not_found', 'Таксономия не найдена');
         }
-        
+
+        $post_id = (int) ($stored_taxonomies[$taxonomy_key]['acf_post_id'] ?? 0);
+        if (!$post_id) {
+            return new WP_Error('acf_id_missing', 'Не найден ACF ID таксономии');
+        }
+
         if ($permanent) {
-            // Полное удаление
-            $post_id = $stored_taxonomies[$taxonomy_key]['acf_post_id'] ?? 0;
-            
-            if ($post_id && get_post($post_id)) {
-                wp_delete_post($post_id, true);
+            if (!function_exists('acf_delete_taxonomy')) {
+                return new WP_Error('acf_not_available', 'ACF Pro функции удаления недоступны');
             }
-            
+            $deleted = acf_delete_taxonomy($post_id);
+            if (!$deleted) {
+                return new WP_Error('acf_delete_failed', 'Не удалось удалить таксономию в ACF');
+            }
+
             unset($stored_taxonomies[$taxonomy_key]);
             update_option('acf_mcp_manager_taxonomies', $stored_taxonomies);
-            
+
+            flush_rewrite_rules();
+
             return array(
                 'success' => true,
                 'message' => sprintf('Таксономия "%s" полностью удалена', $taxonomy_key)
             );
-        } else {
-            // Деактивация
-            $stored_taxonomies[$taxonomy_key]['active'] = false;
-            update_option('acf_mcp_manager_taxonomies', $stored_taxonomies);
-            
-            return array(
-                'success' => true,
-                'message' => sprintf('Таксономия "%s" деактивирована', $taxonomy_key)
-            );
         }
+
+        if (!function_exists('acf_update_taxonomy_active_status')) {
+            return new WP_Error('acf_not_available', 'ACF Pro функции недоступны');
+        }
+        $ok = acf_update_taxonomy_active_status($post_id, false);
+        if (!$ok) {
+            return new WP_Error('acf_deactivate_failed', 'Не удалось деактивировать таксономию в ACF');
+        }
+
+        $stored_taxonomies[$taxonomy_key]['active'] = false;
+        $stored_taxonomies[$taxonomy_key]['updated_at'] = current_time('mysql');
+        $stored_taxonomies[$taxonomy_key]['updated_by'] = get_current_user_id();
+        update_option('acf_mcp_manager_taxonomies', $stored_taxonomies);
+
+        flush_rewrite_rules();
+
+        return array(
+            'success' => true,
+            'message' => sprintf('Таксономия "%s" деактивирована', $taxonomy_key)
+        );
     }
     
     /**
@@ -466,9 +492,27 @@ class ACF_MCP_Taxonomy_Creator {
         if (!isset($stored_taxonomies[$taxonomy_key])) {
             return new WP_Error('taxonomy_not_found', 'Таксономия не найдена');
         }
-        
-        $stored_taxonomies[$taxonomy_key]['active'] = $active;
+
+        $post_id = (int) ($stored_taxonomies[$taxonomy_key]['acf_post_id'] ?? 0);
+        if (!$post_id) {
+            return new WP_Error('acf_id_missing', 'Не найден ACF ID таксономии');
+        }
+
+        if (!function_exists('acf_update_taxonomy_active_status')) {
+            return new WP_Error('acf_not_available', 'ACF Pro функции недоступны');
+        }
+
+        $ok = acf_update_taxonomy_active_status($post_id, (bool) $active);
+        if (!$ok) {
+            return new WP_Error('acf_toggle_failed', 'Не удалось изменить активность таксономии в ACF');
+        }
+
+        $stored_taxonomies[$taxonomy_key]['active'] = (bool) $active;
+        $stored_taxonomies[$taxonomy_key]['updated_at'] = current_time('mysql');
+        $stored_taxonomies[$taxonomy_key]['updated_by'] = get_current_user_id();
         update_option('acf_mcp_manager_taxonomies', $stored_taxonomies);
+
+        flush_rewrite_rules();
         
         $status = $active ? 'активирована' : 'деактивирована';
         return array(

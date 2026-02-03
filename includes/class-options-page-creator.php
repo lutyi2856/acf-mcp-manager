@@ -19,6 +19,12 @@ class ACF_MCP_Options_Page_Creator {
      * Единственный экземпляр класса
      */
     private static $instance = null;
+
+    /**
+     * Ключи хранения данных (новый/legacy)
+     */
+    private $option_key = 'acf_mcp_manager_options_pages';
+    private $legacy_option_key = 'acf_cpt_manager_options_pages';
     
     /**
      * Получить экземпляр класса
@@ -43,22 +49,59 @@ class ACF_MCP_Options_Page_Creator {
             add_action('acf/init', array($this, 'register_stored_options_pages'));
         }
     }
+
+    /**
+     * Получить сохранённые страницы опций с миграцией legacy → new
+     */
+    private function get_stored_pages(): array {
+        $stored = get_option($this->option_key);
+        if (!is_array($stored)) {
+            $stored = array();
+        }
+
+        $legacy = get_option($this->legacy_option_key);
+        if (is_array($legacy) && !empty($legacy)) {
+            $changed = false;
+            foreach ($legacy as $slug => $data) {
+                if (!isset($stored[$slug])) {
+                    $stored[$slug] = $data;
+                    $changed = true;
+                }
+            }
+            if ($changed) {
+                update_option($this->option_key, $stored);
+            }
+        }
+
+        return $stored;
+    }
+
+    private function save_stored_pages(array $pages): void {
+        update_option($this->option_key, $pages);
+    }
+
+    private function log_debug(string $message): void {
+        if (!defined('WP_DEBUG') || !WP_DEBUG) {
+            return;
+        }
+        error_log('ACF MCP Manager (Options Page): ' . $message);
+    }
     
     /**
      * Регистрация сохраненных страниц опций
      */
     public function register_stored_options_pages() {
         if (!function_exists('acf_add_options_page')) {
-            error_log('ACF CPT Manager: acf_add_options_page не доступна');
+            $this->log_debug('acf_add_options_page не доступна');
             return;
         }
         
-        $stored_pages = get_option('acf_cpt_manager_options_pages', array());
-        error_log('ACF CPT Manager: Найдено ' . count($stored_pages) . ' страниц опций');
+        $stored_pages = $this->get_stored_pages();
+        $this->log_debug('Найдено ' . count($stored_pages) . ' страниц опций');
         
         foreach ($stored_pages as $page_slug => $page_data) {
             if (isset($page_data['active']) && $page_data['active']) {
-                error_log("ACF CPT Manager: Регистрация страницы опций {$page_slug}");
+                $this->log_debug("Регистрация страницы опций {$page_slug}");
                 
                 acf_add_options_page($page_data['args']);
                 
@@ -134,7 +177,7 @@ class ACF_MCP_Options_Page_Creator {
         }
         
         // Также сохраняем в нашей системе для совместимости
-        $stored_pages = get_option('acf_cpt_manager_options_pages', array());
+        $stored_pages = $this->get_stored_pages();
         $stored_pages[$args['menu_slug']] = array(
             'acf_post_id' => $post_id,
             'args' => $page_data,
@@ -144,7 +187,7 @@ class ACF_MCP_Options_Page_Creator {
             'created_by' => get_current_user_id(),
             'method' => 'acf_ui'
         );
-        update_option('acf_cpt_manager_options_pages', $stored_pages);
+        $this->save_stored_pages($stored_pages);
         
         // Регистрируем страницу сразу
         if (function_exists('acf_add_options_page')) {
@@ -200,7 +243,7 @@ class ACF_MCP_Options_Page_Creator {
      * Получить список созданных страниц опций
      */
     public function get_options_pages() {
-        $stored_pages = get_option('acf_cpt_manager_options_pages', array());
+        $stored_pages = $this->get_stored_pages();
         
         // Добавляем дополнительную информацию
         foreach ($stored_pages as $slug => &$page) {
@@ -215,7 +258,7 @@ class ACF_MCP_Options_Page_Creator {
      * Обновить страницу опций
      */
     public function update_options_page($menu_slug, $args) {
-        $stored_pages = get_option('acf_cpt_manager_options_pages', array());
+        $stored_pages = $this->get_stored_pages();
         
         if (!isset($stored_pages[$menu_slug])) {
             return new WP_Error('page_not_found', 'Страница опций не найдена');
@@ -262,7 +305,7 @@ class ACF_MCP_Options_Page_Creator {
             $stored_pages[$menu_slug]['sub_pages'] = $args['sub_pages'];
         }
         
-        update_option('acf_cpt_manager_options_pages', $stored_pages);
+        $this->save_stored_pages($stored_pages);
         
         return array(
             'success' => true,
@@ -277,7 +320,7 @@ class ACF_MCP_Options_Page_Creator {
      * @param bool $permanent Полное удаление (true) или деактивация (false)
      */
     public function delete_options_page($menu_slug, $permanent = false) {
-        $stored_pages = get_option('acf_cpt_manager_options_pages', array());
+        $stored_pages = $this->get_stored_pages();
         
         if (!isset($stored_pages[$menu_slug])) {
             return new WP_Error('page_not_found', 'Страница опций не найдена');
@@ -288,13 +331,18 @@ class ACF_MCP_Options_Page_Creator {
             $post_id = $stored_pages[$menu_slug]['acf_post_id'] ?? 0;
             
             // Удаляем ACF UI пост если существует
-            if ($post_id && get_post($post_id)) {
-                wp_delete_post($post_id, true); // true = обход корзины, полное удаление
+            if ($post_id) {
+                // Предпочтительно — через ACF internal API (чистит кэши)
+                if (function_exists('acf_delete_internal_post_type')) {
+                    acf_delete_internal_post_type($post_id, 'acf-ui-options-page');
+                } elseif (get_post($post_id)) {
+                    wp_delete_post($post_id, true); // true = обход корзины, полное удаление
+                }
             }
             
             // Удаляем из нашей системы
             unset($stored_pages[$menu_slug]);
-            update_option('acf_cpt_manager_options_pages', $stored_pages);
+            $this->save_stored_pages($stored_pages);
             
             return array(
                 'success' => true,
@@ -302,8 +350,12 @@ class ACF_MCP_Options_Page_Creator {
             );
         } else {
             // Деактивируем страницу
+            $post_id = $stored_pages[$menu_slug]['acf_post_id'] ?? 0;
+            if ($post_id && function_exists('acf_update_internal_post_type_active_status')) {
+                acf_update_internal_post_type_active_status($post_id, false, 'acf-ui-options-page');
+            }
             $stored_pages[$menu_slug]['active'] = false;
-            update_option('acf_cpt_manager_options_pages', $stored_pages);
+            $this->save_stored_pages($stored_pages);
             
             return array(
                 'success' => true,
@@ -316,14 +368,19 @@ class ACF_MCP_Options_Page_Creator {
      * Активировать/деактивировать страницу опций
      */
     public function toggle_options_page($menu_slug, $active = true) {
-        $stored_pages = get_option('acf_cpt_manager_options_pages', array());
+        $stored_pages = $this->get_stored_pages();
         
         if (!isset($stored_pages[$menu_slug])) {
             return new WP_Error('page_not_found', 'Страница опций не найдена');
         }
         
-        $stored_pages[$menu_slug]['active'] = $active;
-        update_option('acf_cpt_manager_options_pages', $stored_pages);
+        $post_id = $stored_pages[$menu_slug]['acf_post_id'] ?? 0;
+        if ($post_id && function_exists('acf_update_internal_post_type_active_status')) {
+            acf_update_internal_post_type_active_status($post_id, (bool) $active, 'acf-ui-options-page');
+        }
+
+        $stored_pages[$menu_slug]['active'] = (bool) $active;
+        $this->save_stored_pages($stored_pages);
         
         $status = $active ? 'активирована' : 'деактивирована';
         return array(

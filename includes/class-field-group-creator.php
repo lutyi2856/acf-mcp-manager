@@ -989,7 +989,12 @@ class ACF_MCP_Field_Group_Creator {
      * Сохранение группы в нашу систему отслеживания
      */
     private function store_field_group($key, $data, $post_id) {
-        $stored = get_option('acf_cpt_manager_field_groups', array());
+        $stored = get_option('acf_mcp_manager_field_groups');
+        if (!is_array($stored)) {
+            // Миграция legacy ключа
+            $legacy = get_option('acf_cpt_manager_field_groups', array());
+            $stored = is_array($legacy) ? $legacy : array();
+        }
         $stored[$key] = array(
             'post_id' => $post_id,
             'title' => $data['title'],
@@ -997,16 +1002,20 @@ class ACF_MCP_Field_Group_Creator {
             'created_by' => get_current_user_id(),
             'method' => 'mcp'
         );
-        update_option('acf_cpt_manager_field_groups', $stored);
+        update_option('acf_mcp_manager_field_groups', $stored);
     }
     
     /**
      * Удаление группы из системы отслеживания
      */
     private function remove_stored_field_group($key) {
-        $stored = get_option('acf_cpt_manager_field_groups', array());
+        $stored = get_option('acf_mcp_manager_field_groups');
+        if (!is_array($stored)) {
+            $legacy = get_option('acf_cpt_manager_field_groups', array());
+            $stored = is_array($legacy) ? $legacy : array();
+        }
         unset($stored[$key]);
-        update_option('acf_cpt_manager_field_groups', $stored);
+        update_option('acf_mcp_manager_field_groups', $stored);
     }
     
     /**
