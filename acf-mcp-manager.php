@@ -64,15 +64,25 @@ class ACF_MCP_Manager {
     private function init_hooks() {
         add_action('init', array($this, 'init'));
         add_action('rest_api_init', array($this, 'register_rest_routes'));
-        
-        // Интеграция с WordPress MCP если плагин активен
-        if (class_exists('Automattic\WordpressMcp\Core\WpMcp')) {
-            add_action('wordpress_mcp_init', array($this, 'register_mcp_tools'));
-        }
-        
+
+        // Интеграция с WordPress MCP — регистрируем слушателя ПОСЛЕ загрузки всех плагинов.
+        // Раньше проверка класса стояла прямо в init_hooks(), но WP грузит плагины по алфавиту:
+        // acf-mcp-manager/ идёт перед wordpress-mcp/, поэтому на момент запуска конструктора
+        // класс WpMcp ещё не определён, check проваливался, и add_action никогда не вызывался.
+        add_action('plugins_loaded', array($this, 'maybe_register_mcp_integration'), 20);
+
         // Хуки активации/деактивации
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
+    }
+
+    /**
+     * Подписка на wordpress_mcp_init — только после того, как все плагины загружены.
+     */
+    public function maybe_register_mcp_integration() {
+        if (class_exists('Automattic\WordpressMcp\Core\WpMcp')) {
+            add_action('wordpress_mcp_init', array($this, 'register_mcp_tools'));
+        }
     }
     
     /**
