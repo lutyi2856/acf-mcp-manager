@@ -97,7 +97,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_list_post_types'),
             'permission_callback' => array($this, 'check_permissions')
@@ -133,7 +133,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_get_templates'),
             'permission_callback' => array($this, 'check_permissions')
@@ -179,7 +179,8 @@ class ACF_MCP_Integration {
                     ),
                     'sub_pages' => array(
                         'type' => 'array',
-                        'description' => 'Массив подстраниц для создания'
+                        'description' => 'Массив подстраниц для создания',
+                        'items' => array('type' => 'object')
                     ),
                     'description' => array(
                         'type' => 'string',
@@ -211,7 +212,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_list_options_pages'),
             'permission_callback' => array($this, 'check_permissions')
@@ -270,7 +271,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_get_options_templates'),
             'permission_callback' => array($this, 'check_permissions')
@@ -300,7 +301,8 @@ class ACF_MCP_Integration {
                     ),
                     'post_types' => array(
                         'type' => 'array',
-                        'description' => 'Массив типов записей для привязки таксономии'
+                        'description' => 'Массив типов записей для привязки таксономии',
+                        'items' => array('type' => 'string')
                     ),
                     'hierarchical' => array(
                         'type' => 'boolean',
@@ -336,7 +338,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_list_taxonomies'),
             'permission_callback' => array($this, 'check_permissions')
@@ -395,7 +397,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_get_taxonomy_templates'),
             'permission_callback' => array($this, 'check_permissions')
@@ -417,7 +419,8 @@ class ACF_MCP_Integration {
                     ),
                     'fields' => array(
                         'type' => 'array',
-                        'description' => 'Массив полей. Каждое поле: {name, label, type, required, instructions, ...специфичные параметры типа}'
+                        'description' => 'Массив полей. Каждое поле: {name, label, type, required, instructions, ...специфичные параметры типа}',
+                        'items' => array('type' => 'object')
                     ),
                     'target_type' => array(
                         'type' => 'string',
@@ -429,7 +432,8 @@ class ACF_MCP_Integration {
                     ),
                     'location' => array(
                         'type' => 'array',
-                        'description' => 'Альтернатива target_type/target_value. Полный формат: [[{param, operator, value}]]. Упрощённые форматы: [{param, value}] или {param, value}. Параметры: post_type, taxonomy, options_page, page_template и др.'
+                        'description' => 'Альтернатива target_type/target_value. Полный формат: [[{param, operator, value}]]. Упрощённые форматы: [{param, value}] или {param, value}. Параметры: post_type, taxonomy, options_page, page_template и др.',
+                        'items' => array('type' => 'object')
                     ),
                     'menu_order' => array(
                         'type' => 'integer',
@@ -481,7 +485,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_list_field_groups'),
             'permission_callback' => array($this, 'check_permissions')
@@ -524,7 +528,8 @@ class ACF_MCP_Integration {
                     ),
                     'fields' => array(
                         'type' => 'array',
-                        'description' => 'Новый массив полей (заменит существующие)'
+                        'description' => 'Новый массив полей (заменит существующие)',
+                        'items' => array('type' => 'object')
                     ),
                     'target_type' => array(
                         'type' => 'string',
@@ -536,7 +541,8 @@ class ACF_MCP_Integration {
                     ),
                     'location' => array(
                         'type' => 'array',
-                        'description' => 'Альтернатива target_type/target_value. Полный или упрощённый формат правил показа.'
+                        'description' => 'Альтернатива target_type/target_value. Полный или упрощённый формат правил показа.',
+                        'items' => array('type' => 'object')
                     ),
                     'description' => array(
                         'type' => 'string',
@@ -633,15 +639,18 @@ class ACF_MCP_Integration {
                     ),
                     'conditional_logic' => array(
                         'type' => 'array',
-                        'description' => 'Условия показа поля'
+                        'description' => 'Условия показа поля',
+                        'items' => array('type' => 'object')
                     ),
                     'sub_fields' => array(
                         'type' => 'array',
-                        'description' => 'Вложенные поля для типов group/repeater'
+                        'description' => 'Вложенные поля для типов group/repeater',
+                        'items' => array('type' => 'object')
                     ),
                     'layouts' => array(
                         'type' => 'array',
-                        'description' => 'Макеты для flexible_content'
+                        'description' => 'Макеты для flexible_content',
+                        'items' => array('type' => 'object')
                     )
                 ),
                 'required' => array('group_key', 'name', 'type')
@@ -680,7 +689,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_get_field_types'),
             'permission_callback' => array($this, 'check_permissions')
@@ -693,7 +702,7 @@ class ACF_MCP_Integration {
             'type' => 'read',
             'inputSchema' => array(
                 'type' => 'object',
-                'properties' => array()
+                'properties' => (object) array()
             ),
             'callback' => array($this, 'handle_get_field_group_templates'),
             'permission_callback' => array($this, 'check_permissions')
@@ -738,7 +747,8 @@ class ACF_MCP_Integration {
                     ),
                     'fields' => array(
                         'type' => 'array',
-                        'description' => 'Массив имен полей для получения. Если не указан - возвращаются все поля.'
+                        'description' => 'Массив имен полей для получения. Если не указан - возвращаются все поля.',
+                        'items' => array('type' => 'string')
                     )
                 ),
                 'required' => array('post_id')
@@ -934,7 +944,8 @@ class ACF_MCP_Integration {
                     ),
                     'terms' => array(
                         'type' => 'array',
-                        'description' => 'Массив ID термов или их slug для привязки'
+                        'description' => 'Массив ID термов или их slug для привязки (числовые ID передавать как строки)',
+                        'items' => array('type' => 'string')
                     ),
                     'append' => array(
                         'type' => 'boolean',
@@ -1005,7 +1016,8 @@ class ACF_MCP_Integration {
                 'properties' => array(
                     'fields' => array(
                         'type' => 'array',
-                        'description' => 'Массив имен полей. Если не указан - возвращаются все.'
+                        'description' => 'Массив имен полей. Если не указан - возвращаются все.',
+                        'items' => array('type' => 'string')
                     )
                 ),
                 'required' => array()
@@ -1065,7 +1077,8 @@ class ACF_MCP_Integration {
                 'properties' => array(
                     'urls' => array(
                         'type' => 'array',
-                        'description' => 'Массив URL изображений или массив объектов {url, title, alt}'
+                        'description' => 'Массив URL изображений или массив объектов {url, title, alt}',
+                        'items' => array('type' => 'object')
                     ),
                     'post_id' => array(
                         'type' => 'integer',
